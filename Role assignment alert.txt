@@ -1,0 +1,125 @@
+SET QUOTED_IDENTIFIER ON
+
+GO
+
+use PBIReportServer
+
+DECLARE @E1 VARCHAR(200)
+
+DECLARE @E2 VARCHAR(200)
+
+DECLARE @E3 VARCHAR(200)
+
+DECLARE @E4 VARCHAR(200)
+
+DECLARE @E5 VARCHAR(200)
+
+DECLARE @msg VARCHAR(MAX)
+
+DECLARE @MyCursor CURSOR
+
+SET @MyCursor = CURSOR FAST_FORWARD
+
+FOR
+( --Role Removed
+  (SELECT a.Path, a.Name, a.GroupOrUser, a.Role, 'Removed' as Status 
+
+  FROM [dbo].[XXRS_RoleAssignment] a
+
+  EXCEPT
+
+  SELECT [Path], [Name], Users.UserName, Roles.RoleName, 'Removed' as Status
+
+  FROM [dbo].[Catalog]
+
+  LEFT JOIN [dbo].[PolicyUserRole] PR
+
+  ON PR.PolicyID = Catalog.PolicyID
+
+  INNER JOIN Users ON Users.UserID = PR.UserID
+
+  INNER JOIN Roles ON Roles.RoleID = PR.RoleID
+
+  WHERE Catalog.Type = 1
+
+  and Catalog.Property is not NULL)
+  
+  UNION ALL
+
+  --Role Assigned
+  (SELECT [Path], [Name], Users.UserName, Roles.RoleName, 'Assigned' as Status
+
+  FROM [dbo].[Catalog]
+
+  LEFT JOIN [dbo].[PolicyUserRole] PR
+
+  ON PR.PolicyID = Catalog.PolicyID
+
+  INNER JOIN Users ON Users.UserID = PR.UserID
+
+  INNER JOIN Roles ON Roles.RoleID = PR.RoleID
+
+  WHERE Catalog.Type = 1
+
+  and Catalog.Property is not NULL
+  
+  EXCEPT SELECT Path, Name, GroupOrUser, Role, 'Assigned' as Status FROM [dbo].[XXRS_RoleAssignment])
+
+)
+
+-- Table
+
+set @msg = '<h4 style = "font-family:Times New Roman; text-align:center;">Change in List of Role Assignment in All Folders'+'</h4><table style="width:100%; font-size:18px; font-family:Times New Roman; text-align:center; border: 1px solid black; border-collapse: collapse;">
+
+ <tr>
+
+ <th style = "border: 1px solid black; border-collapse: collapse;"><p style = "font-size:14px">Path</p></th>
+
+ <th style = "border: 1px solid black; border-collapse: collapse;"><p style = "font-size:14px">Name</p></th>
+
+ <th style = "border: 1px solid black; border-collapse: collapse;"><p style = "font-size:14px">GroupOrUser</p></th>
+
+ <th style = "border: 1px solid black; border-collapse: collapse;"><p style = "font-size:14px">Role</p></th>
+  
+ <th style = "border: 1px solid black; border-collapse: collapse;"><p style = "font-size:14px">Status</p></th>
+
+ </tr>'
+
+OPEN @MyCursor
+
+FETCH NEXT FROM @MyCursor
+
+INTO @E1,@E2,@E3,@E4,@E5
+
+WHILE (@@FETCH_STATUS = 0)
+
+BEGIN
+
+set @msg= @msg + 
+'<tr>
+<td style = "border: 1px solid black; border-collapse: collapse; font-size:13px">' + @E1 + '</td>
+<td style = "border: 1px solid black; border-collapse: collapse; font-size:13px">' + @E2 + '</td>
+<td style = "border: 1px solid black; border-collapse: collapse; font-size:13px">' + @E3 + '</td>
+<td style = "border: 1px solid black; border-collapse: collapse; font-size:13px">' + @E4 + '</td>
+<td style = "border: 1px solid black; border-collapse: collapse; font-size:13px">' + @E5 + '</td>
+</tr>'
+
+FETCH NEXT FROM @MyCursor
+
+INTO @E1,@E2,@E3,@E4,@E5
+
+END
+
+---END of Table
+
+set @msg = @msg + '</table>'
+
+USE msdb
+EXEC msdb.dbo.sp_send_dbmail
+@recipients = 'email.company.com',
+--@copy_recipients = '',
+@profile_name = 'PBIRS-ADM',
+@subject = '(SSRS Alert) Daily Change in List of Role Assignment in All Folders',
+@body = @msg,
+--@execute_query_database = 'PBIReportServer',
+@body_format=HTML
